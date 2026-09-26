@@ -88,4 +88,58 @@ def get_news(cat):
         all_news=[]
     else: # الكل وعاجل
         try:
-            url = "https://news.google.com/rss/search?q=سوريا&hl=ar&gl=SA&ceid
+            url = "https://news.google.com/rss/search?q=سوريا&hl=ar&gl=SA&ceid=SA:ar" if cat=="الكل" else "https://news.google.com/rss/search?q=عاجل+سوريا&hl=ar&gl=SA&ceid=SA:ar"
+            fg=feedparser.parse(url)
+            for en in fg.entries[:20]:
+                all_news.append({"title":en.title,"link":en.link,"time":getattr(en,'published','')[:16],"source":"Google","image":get_img(en)})
+        except: pass
+        # زود عليها شوي من BBC عشان ما يفضى
+        if len(all_news)<5:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as ex:
+                for r in ex.map(fetch_one, POLITICS[:1]): all_news.extend(r)
+
+    CACHE[cat]=all_news[:25]; CACHE_TIME[cat]=now
+    return CACHE[cat]
+
+@app.route('/manifest.json')
+def mani(): return jsonify({"name":"شامي","short_name":"شامي","start_url":"/","display":"standalone","background_color":"#1b5e20","theme_color":"#1b5e20","icons":[{"src":"https://cdn-icons-png.flaticon.com/512/21/21601.png","sizes":"512x512","type":"image/png"}]})
+@app.route('/sw.js')
+def sw(): return Response("self.addEventListener('install',e=>self.skipWaiting());", mimetype='application/javascript')
+@app.route('/api/prices')
+def api_p(): return jsonify(get_real_prices())
+@app.route('/api/prices/detailed')
+def api_d(): return jsonify(get_detailed())
+
+@app.route('/admin', methods=['GET','POST'])
+def admin():
+    if request.method=='POST':
+        try: save_data({"syp_black":int(request.form.get('syp','15250').replace(',',''))}); PCACHE["time"]=0; DCACHE["time"]=0
+        except: pass
+        return redirect('/admin')
+    syp=load_data().get("syp_black",15250)
+    return f'<html dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{{font-family:system-ui;padding:20px;background:#f5f5f5}}.box{{background:#fff;padding:20px;border-radius:12px;max-width:400px;margin:auto}}input{{width:100%;padding:12px;border:1px solid #ddd;border-radius:8px}}button{{width:100%;padding:12px;background:#1b5e20;color:#fff;border:0;border-radius:8px;margin-top:10px}}</style></head><body><div class="box"><h3>🔧 سعر $ دمشق</h3><form method="post"><input name="syp" value="{syp}"><button>حفظ ✅</button></form><br><a href="/">رجوع</a></div></body></html>'
+
+@app.route('/')
+def home():
+    cat=request.args.get('cat','الكل')
+    prices=get_real_prices()
+    tabs="".join([f'<a href="/?cat={urllib.parse.quote(k)}" class="tab {"active" if k==cat else ""}">{k}</a>' for k in ["الكل","عاجل 🔴","رياضة ⚽","سياسة 🏛️","أسعار 💱"]])
+
+    if cat=="أسعار 💱":
+        d=get_detailed()
+        rows="".join([f'<tr style="{"background:#e8f5e9" if c.get("hl") else ""}"><td><b>{c["name"]}</b></td><td>{c["from"]}</td><td style="color:#1b5e20;font-weight:800">{c["to"]}</td></tr>' for c in d["currencies"]])
+        return f'''<!doctype html><html dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>أسعار</title><link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@700&display=swap" rel="stylesheet"><style>*{{font-family:Tajawal;box-sizing:border-box}}body{{margin:0;background:#f2f3f5}}.top{{background:#1b5e20;color:#fff;padding:12px;display:flex;justify-content:space-between}}.tabs{{display:flex;gap:8px;overflow:auto;padding:10px;background:#fff}}.tab{{padding:10px 16px;background:#eceff1;border-radius:20px;text-decoration:none;color:#333;font-size:13px;white-space:nowrap}}.tab.active{{background:#1b5e20;color:#fff}}.box{{max-width:800px;margin:auto;padding:12px}}.sec{{background:#fff;border-radius:14px;padding:14px;margin:12px 0}} table{{width:100%;border-collapse:collapse;font-size:13px}} td,th{{padding:10px;border-bottom:1px solid #eee;text-align:right}}</style></head><body><div class="top"><b>💱 أسعار شامي {d["updated"]}</b><a href="/" style="color:#fff;text-decoration:none">رجوع ⬅️</a></div><div class="tabs">{tabs}</div><div class="box"><div class="sec"><table><tr><th>العملة</th><th>السعر</th><th>بالسوري</th></tr>{rows}</table></div><div class="sec">ذهب: ${d["gold"]["oz"]} | جرام سوري: {d["gold"]["g_syp"]:,} ل.س</div></div></body></html>'''
+
+    news=get_news(cat)
+    cards="".join([f'<div class="card"><div class="imgw"><img src="{n["image"]}" loading="lazy" onerror="this.src=\'{DEFAULT_IMG}\'"><span class="badge">{n["source"]}</span></div><div class="info"><small>{n["time"]}</small><h2>{n["title"]}</h2><div class="btns"><a href="{n["link"]}" target="_blank" class="btn-r">📖 اقرأ</a><a href="https://wa.me/?text={urllib.parse.quote(n["title"]+" "+n["link"])}" target="_blank" class="btn-w">واتساب</a></div></div></div>' for n in news])
+
+    return f'''<!doctype html><html dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>شامي - {cat}</title><link rel="manifest" href="/manifest.json"><link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@700;800&display=swap" rel="stylesheet"><style>*{{font-family:Tajawal;box-sizing:border-box}}body{{margin:0;background:#f2f3f5}}.top{{background:#1b5e20;color:#fff;padding:12px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:30}}.prices{{background:#111;color:#ddd;display:flex;gap:14px;overflow:auto;padding:9px 12px;font-size:13px;white-space:nowrap}}.tabs{{display:flex;gap:8px;overflow:auto;padding:10px;background:#fff;position:sticky;top:54px;z-index:20}}.tab{{padding:10px 16px;background:#eceff1;border-radius:20px;text-decoration:none;color:#333;font-weight:700;font-size:13px;white-space:nowrap}}.tab.active{{background:#1b5e20;color:#fff}}.search{{background:#fff;padding:10px;display:flex;gap:8px;position:sticky;top:102px;z-index:19}}.search input{{flex:1;padding:10px 14px;border:1px solid #ddd;border-radius:20px}}.search button{{background:#1b5e20;color:#fff;border:0;padding:10px 16px;border-radius:20px}}.container{{max-width:760px;margin:auto;padding:12px}}.card{{background:#fff;border-radius:16px;overflow:hidden;margin:12px 0;box-shadow:0 3px 10px rgba(0,0,0,.07)}}.imgw{{position:relative}}.imgw img{{width:100%;height:220px;object-fit:cover;background:#eee}}.badge{{position:absolute;top:10px;right:10px;background:rgba(0,0,0,.7);color:#fff;padding:4px 8px;border-radius:14px;font-size:11px}}.info{{padding:12px}}.info h2{{margin:6px 0 10px;font-size:15px;line-height:1.5}}.btns{{display:flex;gap:8px}}.btn-r,.btn-w{{flex:1;text-align:center;padding:10px;border-radius:10px;text-decoration:none;font-weight:800;font-size:13px}}.btn-r{{background:#111;color:#fff}}.btn-w{{background:#25D366;color:#fff}}</style></head><body>
+<div class="top"><div><b>🔥 شامي</b><br><small style="font-size:11px;opacity:.8">أخبار + أسعار حية</small></div><a href="/admin" style="background:rgba(255,255,255,.2);color:#fff;padding:6px 10px;border-radius:16px;text-decoration:none">⚙️</a></div>
+<div class="prices"><span>₿ {prices["btc"]}</span><span>ETH {prices["eth"]}</span><span>🪙 {prices["gold"]}</span><span>💵 دمشق {prices["syp_black"]} ل.س</span><span style="margin-right:auto"><a href="/?cat=%D8%A3%D8%B3%D8%B9%D8%A7%D8%B1%20%F0%9F%92%B1" style="color:#25D366;text-decoration:none">كل الأسعار 💱</a></span></div>
+<div class="search"><form action="/"><input name="q" placeholder="🔍 ابحث..."><button>بحث</button></form></div>
+<div class="tabs">{tabs}</div>
+<div class="container">{cards if cards else "<p style='text-align:center;padding:40px'>جاري التحميل... حدث الصفحة</p>"}</div>
+</body></html>'''
+
+if __name__=='__main__':
+    app.run(host='0.0.0.0',port=int(os.environ.get("PORT",10000)))
