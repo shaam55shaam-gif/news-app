@@ -1,68 +1,70 @@
-import os, json, time, re, urllib.parse, concurrent.futures, requests, feedparser
 from flask import Flask, request
+import requests, feedparser, os, urllib.parse
 
 app = Flask(__name__)
-HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0)'}
+HEADERS = {'User-Agent': 'Mozilla/5.0'}
 
-SRC = {
- "رياضة ⚽": [
-  {"u":"https://www.yallakora.com/rss/rss.aspx","n":"يلا كورة"},
-  {"u":"https://www.bbc.com/arabic/sport/rss.xml","n":"BBC Sport"},
-  {"u":"https://www.france24.com/ar/tag/رياضة/rss","n":"France24 Sport"},
-  {"u":"https://www.kooora.com/rss.aspx","n":"كووورة"},
-  {"u":"https://www.skynewsarabia.com/web/rss","n":"سكاي"},
- ],
- "سياسة 🏛️": [
-  {"u":"https://www.bbc.com/arabic/index.xml","n":"BBC عربي"},
-  {"u":"https://www.france24.com/ar/rss","n":"France24"},
-  {"u":"https://www.skynewsarabia.com/web/rss","n":"سكاي عربية"},
-  {"u":"https://arabic.cnn.com/rss","n":"CNN عربي"},
-  {"u":"https://www.aljazeera.net/xml/rss/all.xml","n":"الجزيرة"},
- ],
- "اقتصاد 💰": [
-  {"u":"https://www.cnbcarabia.com/rss","n":"CNBC عربية"},
-  {"u":"https://www.alarabiya.net/.mrss/ar/business.xml","n":"العربية"},
-  {"u":"https://www.skynewsarabia.com/web/rss","n":"سكاي"},
- ],
- "فن 🎭": [
-  {"u":"https://www.france24.com/ar/tag/ثقافة/rss","n":"ثقافة"},
-  {"u":"https://www.bbc.com/arabic/art-and-culture/rss.xml","n":"BBC فن"},
-  {"u":"https://www.skynewsarabia.com/web/rss","n":"سكاي فن"},
- ],
- "عاجل 🔴": [
-  {"u":"https://www.bbc.com/arabic/index.xml","n":"BBC"},
-  {"u":"https://www.aljazeera.net/xml/rss/all.xml","n":"الجزيرة"},
- ],
- "الكل": [
-  {"u":"https://www.bbc.com/arabic/index.xml","n":"BBC"},
-  {"u":"https://www.france24.com/ar/rss","n":"France24"},
-  {"u":"https://www.skynewsarabia.com/web/rss","n":"سكاي"},
- ]
-}
-
-CACHE = {}
-
-def get_img(entry):
+def get_img(e):
     try:
-        if 'media_content' in entry and entry.media_content:
-            url = entry.media_content[0]['url']
-            if url.startswith('http'): return url
-        if 'media_thumbnail' in entry and entry.media_thumbnail:
-            url = entry.media_thumbnail[0]['url']
-            if url.startswith('http'): return url
-        if 'enclosures' in entry and entry.enclosures:
-            url = entry.enclosures[0].get('href','')
-            if url.startswith('http'): return url
+        if hasattr(e, 'media_content') and e.media_content:
+            u = e.media_content[0]['url']
+            if u.startswith('http'): return u
     except: pass
-    # صورة افتراضية حلوة بدل المربع الأبيض
-    return "https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=600&h=400&fit=crop"
+    return "https://images.unsplash.com/photo-1495020689067?w=600&h=400&fit=crop"
 
-def fetch_one(s):
+def fetch_feed(url):
     try:
-        r = requests.get(s["u"], headers=HEADERS, timeout=7)
+        r = requests.get(url, headers=HEADERS, timeout=7)
         f = feedparser.parse(r.content)
-        out=[]
-        for e in f.entries[:5]:
+        out = []
+        for x in f.entries[:8]:
             out.append({
-                "title": getattr(e,'title','خبر جديد')[:120],
-                "link": getattr(e,'link','#'),
+                "title": x.title,
+                "link": x.link,
+                "image": get_img(x),
+                "source": "BBC"
+            })
+        return out
+    except:
+        return []
+
+@app.route('/')
+def home():
+    cat = request.args.get('cat', 'الكل')
+    news = fetch_feed("https://www.bbc.com/arabic/index.xml")
+
+    cats = ["الكل","عاجل 🔴","رياضة ⚽","سياسة 🏛️","اقتصاد 💰","فن 🎭"]
+    tabs_html = ""
+    for c in cats:
+        active = 'active' if c == cat else ''
+        link = "/?cat=" + urllib.parse.quote(c)
+        tabs_html += '<a href="' + link + '" class="' + active + '">' + c + '</a>'
+
+    cards_html = ""
+    for n in news:
+        cards_html += '<div class="card"><img src="' + n["image"] + '" onerror="this.src=\'https://images.unsplash.com/photo-1495020689067?w=600\'"><div class="c"><h3>' + n["title"] + '</h3><small>' + n["source"] + '</small><br><a class="link" href="' + n["link"] + '" target="_blank">اقرأ الخبر</a></div></div>'
+
+    html = """<!DOCTYPE html>
+<html dir="rtl" lang="ar"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>شامي نيوز</title>
+<style>
+body{font-family:system-ui;background:#f6f7f9;margin:0}
+.header{background:#fff;padding:15px;position:sticky;top:0;box-shadow:0 2px 8px #0001}
+.tabs{display:flex;gap:8px;overflow:auto;padding:10px}
+.tabs a{padding:8px 16px;border-radius:25px;background:#e9e9eb;color:#333;text-decoration:none;font-weight:600}
+.tabs a.active{background:#000;color:#fff}
+.card{background:#fff;border-radius:16px;overflow:hidden;margin:12px;box-shadow:0 4px 12px #0001}
+.card img{width:100%;height:200px;object-fit:cover;background:#ddd}
+.card.c{padding:12px}
+.card h3{margin:0 0 6px;font-size:17px}
+.link{color:#6b21a8;text-decoration:none;font-weight:bold}
+</style></head><body>
+<div class="header"><h2>شامي نيوز</h2></div>
+<div class="tabs">""" + tabs_html + """</div>
+<div>""" + cards_html + """</div>
+</body></html>"""
+    return html
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=int(os.environ.get("PORT",10000)))
