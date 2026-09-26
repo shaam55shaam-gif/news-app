@@ -144,4 +144,68 @@ def read_article():
     try:
         r = requests.get(url, headers={'User-Agent':'Mozilla/5.0'}, timeout=4)
         ps = re.findall(r'<p[^>]*>(.*?)</p>', r.text, re.DOTALL)
-        clean=[re.sub(r'<[^>]+>', '', p).strip() for p in ps[:12] if len(re.sub(r'<[^
+        clean=[re.sub(r'<[^>]+>', '', p).strip() for p in ps[:12] if len(re.sub(r'<[^>]+>', '', p).strip())>40]
+        if clean: txt = "\n".join(clean)
+    except: pass
+    return f"""<!doctype html><html dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{title[:50]}</title>
+    <style>body{{margin:0;font-family:Tahoma;background:#f5f5f5}}.h{{background:#1b5e20;color:#fff;padding:12px;display:flex;gap:10px;position:sticky;top:0}}.h a{{color:#fff;text-decoration:none;background:rgba(255,255,255,.2);padding:6px 14px;border-radius:20px}}.c{{max-width:700px;margin:auto;background:#fff}}.c img{{width:100%}}.body{{padding:18px}}h1{{font-size:20px}}p{{font-size:17px;line-height:1.8;margin:12px 0}}.acts{{display:flex;gap:10px;padding:16px;position:sticky;bottom:0;background:#fff}}.btn{{flex:1;padding:12px;text-align:center;border-radius:10px;text-decoration:none;font-weight:bold}}.src{{background:#111;color:#fff}}.wa{{background:#25D366;color:#fff}}</style></head>
+    <body><div class="h"><a href="javascript:history.back()">← رجوع</a><b>شامي</b></div><div class="c"><img src="{img}"><div class="body"><h1>{title}</h1><hr>{"".join([f'<p>{p}</p>' for p in txt.split(chr(10))])}</div><div class="acts"><a href="{url}" target="_blank" class="btn src">فتح المصدر ↗</a><a href="https://wa.me/?text={urllib.parse.quote(title+' '+url)}" class="btn wa">واتساب</a></div></div></body></html>"""
+
+@app.route('/search')
+def search():
+    q=request.args.get('q','').strip()
+    if not q: return redirect('/')
+    news=get_news("الكل", query=q)
+    return home_render("الكل", news, q)
+
+def home_render(cat, news, q=None):
+    tabs="".join([f'<a href="/?cat={urllib.parse.quote(k)}" class="tab {"active" if k==cat and not q else ""}">{k}</a>' for k in FEEDS])
+    economy_bar='<div style="background:#0d2818;color:#fff;padding:10px 14px;display:flex;justify-content:space-between;font-size:13px;border-radius:10px;margin:10px"><span>💵 دمشق: ~15,200 ل.س</span><span>🪙 ذهب: 1.1M</span><span style="background:#25D366;padding:2px 8px;border-radius:10px">مباشر</span></div>'
+    search_box=f'''
+    <div style="background:#fff;padding:10px;position:sticky;top:56px;z-index:9;border-bottom:1px solid #eee">
+      <form action="/search" method="get" style="display:flex;gap:8px;max-width:700px;margin:auto">
+        <input name="q" value="{q or ''}" placeholder="🔍 ابحث: برشلونة، الدولار، سياسة..." style="flex:1;padding:10px 14px;border:1px solid #ddd;border-radius:20px;font-family:Tahoma">
+        <button style="background:#1b5e20;color:#fff;border:0;padding:10px 18px;border-radius:20px;font-weight:bold">بحث</button>
+      </form>
+    </div>'''
+    title_bar=f'<div style="padding:10px;background:#e8f5e9;text-align:center">نتائج "{q}" - {len(news)} خبر <a href="/" style="color:#1b5e20">✕</a></div>' if q else ""
+    cards=""
+    for i,n in enumerate(news):
+        if not q and i==2: cards+=economy_bar
+        read_url=f"/read?url={urllib.parse.quote(n['link'])}&title={urllib.parse.quote(n['title'])}&img={urllib.parse.quote(n['image'])}"
+        cards+=f'<div class="card"><img src="{n["image"]}" loading="lazy" onerror="this.src=\'{DEFAULT_IMAGES.get(cat)}\'"><div class="body"><span>{n["source"]} | {n["time"]}</span><h2>{n["title"]}</h2><div class="btns"><a href="{read_url}" class="r">📖 اقرأ</a><a href="{n["wa"]}" target="_blank" class="w">واتساب</a></div></div></div>'
+    return f"""<!doctype html><html dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>شامي</title><link rel="manifest" href="/manifest.json">
+    <style>body{{margin:0;font-family:Tahoma;background:#f0f2f5}}.h{{background:#1b5e20;color:#fff;padding:12px;display:flex;justify-content:space-between;position:sticky;top:0;z-index:10}}.tabs{{display:flex;gap:8px;overflow:auto;padding:10px;background:#fff;position:sticky;top:105px}}.tab{{padding:8px 14px;background:#eee;border-radius:20px;text-decoration:none;color:#333;white-space:nowrap;font-size:13px}}.tab.active{{background:#2e7d32;color:#fff}}.c{{max-width:700px;margin:auto;padding:10px}}.card{{background:#fff;border-radius:12px;overflow:hidden;margin:12px 0}}.card img{{width:100%;height:190px;object-fit:cover}}.body{{padding:12px}}.btns{{display:flex;gap:8px}}.r,.w{{flex:1;text-align:center;padding:10px;border-radius:8px;color:#fff;font-weight:bold;text-decoration:none}}.r{{background:#111}}.w{{background:#25D366}}</style></head>
+    <body><div class="h"><div><h1 style="margin:0;font-size:16px">🔥 شامي - كامل + مسرّع ✅</h1><div style="font-size:11px">{len(SPORTS_SOURCES)} رياضة + {len(POLITICS_SOURCES)} سياسة + بحث + صور حقيقية</div></div><a href="/admin" style="color:#fff;text-decoration:none">⚙️</a></div>{search_box}<div class="tabs">{tabs}</div>{title_bar}<div class="c">{cards}</div></body></html>"""
+
+@app.route('/')
+def home():
+    cat=request.args.get('cat','الكل')
+    return home_render(cat, get_news(cat))
+
+@app.route('/manifest.json')
+def manifest():
+    d={"name":"شامي","short_name":"شامي","start_url":"/","display":"standalone","background_color":"#1b5e20","theme_color":"#1b5e20","lang":"ar","dir":"rtl","icons":[{"src":"https://cdn-icons-png.flaticon.com/512/21/21601.png","sizes":"192x192","type":"image/png"}]}
+    return Response(json.dumps(d, ensure_ascii=False), mimetype='application/manifest+json')
+@app.route('/sw.js')
+def sw(): return Response("self.addEventListener('install',e=>self.skipWaiting());", mimetype='application/javascript')
+ADMIN_PASSWORD="shami123"
+@app.route('/admin', methods=['GET','POST'])
+def admin():
+    if request.args.get('logout'): session.pop('admin',None); return redirect('/admin')
+    if request.method=='POST':
+        if request.form.get('password')==ADMIN_PASSWORD: session['admin']=True
+        elif session.get('admin') and request.form.get('title'):
+            CUSTOM_NEWS.insert(0, {"title":request.form.get('title'),"link":request.form.get('link') or "#","time":datetime.now().strftime("%H:%M"),"source":"خاص 🔥","image":request.form.get('image') or DEFAULT_IMAGES.get(request.form.get('category','الكل')),"wa":f"https://wa.me/?text={urllib.parse.quote(request.form.get('title'))}","is_custom":True,"category":request.form.get('category','الكل')})
+            save_custom()
+        elif request.form.get('delete_index') is not None:
+            try: CUSTOM_NEWS.pop(int(request.form.get('delete_index'))); save_custom()
+            except: pass
+    if not session.get('admin'):
+        return """<!doctype html><html dir=rtl><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1><style>body{font-family:Tahoma;background:#f0f2f5;display:flex;justify-content:center;align-items:center;height:100vh;margin:0}.box{background:#fff;padding:30px;border-radius:12px;width:320px;text-align:center}input{width:100%;padding:12px;margin:8px 0}button{width:100%;padding:12px;background:#1b5e20;color:#fff;border:0;border-radius:8px}</style></head><body><form class=box method=post><h2>🔐 شامي</h2><input type=password name=password placeholder=shami123 required><button>دخول</button></form></body></html>"""
+    lst="".join([f'<div style="background:#fff;padding:8px;margin:6px 0;display:flex;justify-content:space-between"><span>{n["title"][:30]}</span><form method=post><input type=hidden name=delete_index value={i}><button style="background:red;color:#fff;border:0;padding:4px 8px">حذف</button></form></div>' for i,n in enumerate(CUSTOM_NEWS)])
+    return f"""<!doctype html><html dir=rtl><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1><style>body{{font-family:Tahoma;background:#f0f2f5;margin:0}}.h{{background:#1b5e20;color:#fff;padding:14px;text-align:center}}.c{{max-width:600px;margin:auto;padding:12px}}input,select{{width:100%;padding:10px;margin:5px 0}}.btn{{width:100%;background:#1b5e20;color:#fff;padding:10px;border:0;border-radius:8px}}</style></head><body><div class=h><h2>شامي كامل - كل المصادر ✅</h2></div><div class=c><form method=post style=background:#fff;padding:12px><input name=title placeholder="عنوان *" required><input name=image placeholder="صورة"><input name=link placeholder="رابط"><select name=category><option>سياسة 🏛️</option><option>رياضة ⚽</option><option>اقتصاد 💰</option><option>الكل</option></select><button class=btn>نشر</button></form>{lst}</div></body></html>"""
+
+if __name__=='__main__':
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
