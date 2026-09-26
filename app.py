@@ -3,39 +3,41 @@ import feedparser, urllib.parse, json, re, os, requests, time
 from datetime import datetime
 
 app = Flask(__name__)
-app.secret_key = "shami_politics"
+app.secret_key = "shami_economy"
 
 FEEDS = {
     "الكل": "https://news.google.com/rss/search?q=سوريا&hl=ar&gl=SA&ceid=SA:ar",
     "عاجل 🔴": "https://news.google.com/rss/search?q=عاجل+سوريا&hl=ar&gl=SA&ceid=SA:ar",
     "رياضة ⚽": "https://news.google.com/rss/search?q=رياضة+سورية&hl=ar&gl=SA&ceid=SA:ar",
-    "اقتصاد 💰": "https://news.google.com/rss/search?q=اقتصاد+سوريا&hl=ar&gl=SA&ceid=SA:ar",
+    "اقتصاد 💰": "https://news.google.com/rss/search?q=اقتصاد+سوريا+دولار&hl=ar&gl=SA&ceid=SA:ar",
     "سياسة 🏛️": "https://news.google.com/rss/search?q=سياسة+سوريا&hl=ar&gl=SA&ceid=SA:ar",
     "ثقافية 🎭": "https://news.google.com/rss/search?q=ثقافة+سوريا&hl=ar&gl=SA&ceid=SA:ar",
     "فن 🎨": "https://news.google.com/rss/search?q=فن+مشاهير+سوريا&hl=ar&gl=SA&ceid=SA:ar"
 }
 
-# مصادر منظمة وآمنة - 3 لكل قسم بس
 SPORTS_SOURCES = [
     {"url": "https://sana.sy/feed/", "name": "سانا 🇸🇾"},
     {"url": "https://www.yallakora.com/rss/rss.aspx", "name": "يلا كورة ⚽"},
-    {"url": "https://www.beinsports.com/ar/rss", "name": "beIN 🌍"},
 ]
 
 POLITICS_SOURCES = [
-    {"url": "https://sana.sy/feed/", "name": "سانا - سياسة 🇸🇾"},
-    {"url": "https://www.bbc.com/arabic/index.xml", "name": "BBC عربي 🌍"},
-    {"url": "https://www.aljazeera.net/xml/rss/all.xml", "name": "الجزيرة 🌍"},
+    {"url": "https://sana.sy/feed/", "name": "سانا 🇸🇾"},
+    {"url": "https://www.bbc.com/arabic/index.xml", "name": "BBC 🌍"},
+]
+
+ECONOMY_SOURCES = [
+    {"url": "https://sana.sy/feed/", "name": "سانا اقتصاد 🇸🇾"},
+    {"url": "https://www.aljazeera.net/xml/rss/all.xml", "name": "الجزيرة 💰"},
 ]
 
 EXTRA_FEEDS = {
-    "الكل": [{"url": "https://sana.sy/feed/", "name": "سانا 🇸🇾"}],
-    "عاجل 🔴": [{"url": "https://sana.sy/feed/", "name": "سانا 🇸🇾"}],
+    "الكل": [{"url": "https://sana.sy/feed/", "name": "سانا"}],
+    "عاجل 🔴": [{"url": "https://sana.sy/feed/", "name": "سانا"}],
     "رياضة ⚽": SPORTS_SOURCES,
     "سياسة 🏛️": POLITICS_SOURCES,
-    "اقتصاد 💰": [{"url": "https://www.aljazeera.net/xml/rss/all.xml", "name": "الجزيرة"}],
+    "اقتصاد 💰": ECONOMY_SOURCES,
     "ثقافية 🎭": [{"url": "https://sana.sy/feed/", "name": "سانا"}],
-    "فن 🎨": [{"url": "https://www.snacksyrian.com/feed/", "name": "سناك سوري"}]
+    "فن 🎨": [{"url": "https://www.snacksyrian.com/feed/", "name": "سناك"}]
 }
 
 CUSTOM_FILE = "custom_news.json"
@@ -109,8 +111,6 @@ def read_article():
     <style>body{{margin:0;font-family:Tahoma;background:#f5f5f5}}.h{{background:#1b5e20;color:#fff;padding:12px;display:flex;gap:10px;position:sticky;top:0}}.h a{{color:#fff;text-decoration:none;background:rgba(255,255,255,.2);padding:6px 14px;border-radius:20px}}.c{{max-width:700px;margin:auto;background:#fff}}.c img{{width:100%}}.body{{padding:18px}}h1{{font-size:20px}}p{{font-size:17px;line-height:1.8;margin:12px 0}}.acts{{display:flex;gap:10px;padding:16px;position:sticky;bottom:0;background:#fff}}.btn{{flex:1;padding:12px;text-align:center;border-radius:10px;text-decoration:none;font-weight:bold}}.src{{background:#111;color:#fff}}.wa{{background:#25D366;color:#fff}}</style></head>
     <body><div class="h"><a href="javascript:history.back()">← رجوع</a><b>شامي</b></div><div class="c"><img src="{img}"><div class="body"><h1>{title}</h1><hr>{"".join([f'<p>{p}</p>' for p in txt.split(chr(10))])}</div><div class="acts"><a href="{url}" target="_blank" class="btn src">فتح المصدر ↗</a><a href="https://wa.me/?text={urllib.parse.quote(title+' '+url)}" class="btn wa">واتساب</a></div></div></body></html>"""
 
-@app.route('/api/news')
-def api_news(): return jsonify(get_news(request.args.get('cat','الكل')))
 @app.route('/manifest.json')
 def manifest():
     d={"name":"شامي","short_name":"شامي","start_url":"/","display":"standalone","background_color":"#1b5e20","theme_color":"#1b5e20","lang":"ar","dir":"rtl","icons":[{"src":"https://cdn-icons-png.flaticon.com/512/21/21601.png","sizes":"192x192","type":"image/png"}]}
@@ -130,9 +130,9 @@ def admin():
             try: CUSTOM_NEWS.pop(int(request.form.get('delete_index'))); save_custom()
             except: pass
     if not session.get('admin'):
-        return """<!doctype html><html dir=rtl><head><meta charset=utf-8><meta name=viewport content=width=device-width,initial-scale=1><style>body{font-family:Tahoma;background:#f0f2f5;display:flex;justify-content:center;align-items:center;height:100vh;margin:0}.box{background:#fff;padding:30px;border-radius:12px;width:320px;text-align:center}input{width:100%;padding:12px;margin:8px 0}button{width:100%;padding:12px;background:#1b5e20;color:#fff;border:0;border-radius:8px}</style></head><body><form class=box method=post><h2>🔐 شامي</h2><input type=password name=password placeholder=shami123 required><button>دخول</button></form></body></html>"""
+        return """<!doctype html><html dir=rtl><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1><style>body{font-family:Tahoma;background:#f0f2f5;display:flex;justify-content:center;align-items:center;height:100vh;margin:0}.box{background:#fff;padding:30px;border-radius:12px;width:320px;text-align:center}input{width:100%;padding:12px;margin:8px 0}button{width:100%;padding:12px;background:#1b5e20;color:#fff;border:0;border-radius:8px}</style></head><body><form class=box method=post><h2>🔐 شامي</h2><input type=password name=password placeholder=shami123 required><button>دخول</button></form></body></html>"""
     lst="".join([f'<div style="background:#fff;padding:8px;margin:6px 0;display:flex;justify-content:space-between"><span>{n["title"][:30]}</span><form method=post><input type=hidden name=delete_index value={i}><button style="background:red;color:#fff;border:0;padding:4px 8px">حذف</button></form></div>' for i,n in enumerate(CUSTOM_NEWS)])
-    return f"""<!doctype html><html dir=rtl><head><meta charset=utf-8><meta name=viewport content=width=device-width,initial-scale=1><style>body{{font-family:Tahoma;background:#f0f2f5;margin:0}}.h{{background:#1b5e20;color:#fff;padding:14px;text-align:center}}.c{{max-width:600px;margin:auto;padding:12px}}input,select{{width:100%;padding:10px;margin:5px 0}}.btn{{width:100%;background:#1b5e20;color:#fff;padding:10px;border:0;border-radius:8px}}</style></head><body><div class=h><h2>شامي ✅ رياضة + سياسة</h2></div><div class=c><form method=post style=background:#fff;padding:12px><input name=title placeholder="عنوان *" required><input name=image placeholder="صورة"><input name=link placeholder="رابط"><select name=category><option>سياسة 🏛️</option><option>رياضة ⚽</option><option>الكل</option></select><button class=btn>نشر</button></form>{lst}</div></body></html>"""
+    return f"""<!doctype html><html dir=rtl><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1><style>body{{font-family:Tahoma;background:#f0f2f5;margin:0}}.h{{background:#1b5e20;color:#fff;padding:14px;text-align:center}}.c{{max-width:600px;margin:auto;padding:12px}}input,select{{width:100%;padding:10px;margin:5px 0}}.btn{{width:100%;background:#1b5e20;color:#fff;padding:10px;border:0;border-radius:8px}}</style></head><body><div class=h><h2>شامي - اقتصاد + سياسة + رياضة ✅</h2></div><div class=c><form method=post style=background:#fff;padding:12px><input name=title placeholder="عنوان *" required><input name=image placeholder="صورة"><input name=link placeholder="رابط"><select name=category><option>اقتصاد 💰</option><option>سياسة 🏛️</option><option>رياضة ⚽</option><option>الكل</option></select><button class=btn>نشر</button></form>{lst}</div></body></html>"""
 
 @app.route('/')
 def home():
@@ -140,12 +140,22 @@ def home():
     news=get_news(cat)
     tabs="".join([f'<a href="/?cat={urllib.parse.quote(k)}" class="tab {"active" if k==cat else ""}">{k}</a>' for k in FEEDS])
     cards=""
+    # شريط اقتصاد صغير فوق
+    economy_bar = ""
+    if cat in ["الكل", "اقتصاد 💰"]:
+        economy_bar = '<div style="background:#0d2818;color:#fff;padding:10px 14px;display:flex;justify-content:space-between;font-size:13px;border-radius:10px;margin:10px"><span>💵 دولار دمشق: ~15,200 ل.س</span><span>🪙 ذهب: 1,100,000 ل.س</span><span style="background:#25D366;padding:2px 8px;border-radius:10px">مباشر</span></div>'
+
     for i,n in enumerate(news):
-        if i==4: cards+='<div class="card" style="background:#fff9c4;padding:12px;text-align:center;border:2px dashed #fbc02d">إعلان</div>'
+        if i==3: cards+=f'{economy_bar}<div class="card" style="background:#fff9c4;padding:12px;text-align:center;border:2px dashed #fbc02d">📢 إعلانك هنا - تواصل معنا</div>'
         read_url=f"/read?url={urllib.parse.quote(n['link'])}&title={urllib.parse.quote(n['title'])}&img={urllib.parse.quote(n['image'])}"
         cards+=f'<div class="card"><img src="{n["image"]}" loading="lazy"><div class="body"><span>{n["source"]} | {n["time"]}</span><h2>{n["title"]}</h2><div class="btns"><a href="{read_url}" class="r">📖 اقرأ</a><a href="{n["wa"]}" target="_blank" class="w">واتساب</a></div></div></div>'
+
+    if cat not in ["الكل", "اقتصاد 💰"]:
+        # اضف شريط الاقتصاد بكل الصفحات فوق
+        cards = economy_bar + cards
+
     return f"""<!doctype html><html dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>شامي</title><link rel="manifest" href="/manifest.json"><style>body{{margin:0;font-family:Tahoma;background:#f0f2f5}}.h{{background:#1b5e20;color:#fff;padding:12px;display:flex;justify-content:space-between;position:sticky;top:0;z-index:10}}.tabs{{display:flex;gap:8px;overflow:auto;padding:10px;background:#fff;position:sticky;top:56px}}.tab{{padding:8px 14px;background:#eee;border-radius:20px;text-decoration:none;color:#333;white-space:nowrap;font-size:13px}}.tab.active{{background:#2e7d32;color:#fff}}.c{{max-width:700px;margin:auto;padding:10px}}.card{{background:#fff;border-radius:12px;overflow:hidden;margin:12px 0}}.card img{{width:100%;height:190px;object-fit:cover}}.body{{padding:12px}}.btns{{display:flex;gap:8px}}.r,.w{{flex:1;text-align:center;padding:10px;border-radius:8px;color:#fff;font-weight:bold;text-decoration:none}}.r{{background:#111}}.w{{background:#25D366}}</style></head>
-    <body><div class="h"><div><h1 style="margin:0;font-size:17px">🔥 شامي - رياضة + سياسة ✅</h1><div style="font-size:11px">كل قسم 3 مصادر منظمة</div></div><a href="/admin" style="color:#fff;text-decoration:none">⚙️</a></div><div class="tabs">{tabs}</div><div class="c">{cards}</div></body></html>"""
+    <body><div class="h"><div><h1 style="margin:0;font-size:17px">🔥 شامي - اقتصاد + سياسة + رياضة ✅</h1><div style="font-size:11px">3 أقسام منظمة + أسعار مباشرة</div></div><a href="/admin" style="color:#fff;text-decoration:none">⚙️</a></div><div class="tabs">{tabs}</div><div class="c">{cards}</div></body></html>"""
 
 if __name__=='__main__':
     port = int(os.environ.get("PORT", 10000))
